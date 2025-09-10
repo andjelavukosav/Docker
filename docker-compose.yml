@@ -1,6 +1,25 @@
 version: "3.7"
 
 services:
+  # Gateway servis
+  gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    image: gateway_web_server
+    container_name: gateway_server
+    restart: always
+    networks:
+      - servers
+    ports:
+      - "8080:8080"   # Frontend šalje sve REST pozive na ovaj port
+    depends_on:
+      - stakeholders
+    environment:
+      - STAKEHOLDERS_SERVICE_ADDRESS=stakeholders:8000
+      - GATEWAY_ADDRESS=:8080
+
+  # Stakeholders servis (gRPC server)
   stakeholders:
     build:
       context: ./Stakeholders
@@ -11,14 +30,13 @@ services:
     networks:
       - servers
     ports:
-      - "8080:8080"
+      - "8000:8000"   # gRPC server sluša na 8000 unutar mreže
     depends_on:
       - neo4j
     environment:
       - NEO4J_DB=neo4j://neo4j:7687
       - NEO4J_USERNAME=neo4j
       - NEO4J_PASS=stakeholders
-
 
   neo4j:
     image: neo4j:5.22
@@ -35,8 +53,7 @@ services:
     volumes:
       - neo4j_data:/data
 
-  
-  #Blog servis
+  # Blog servis
   blog-service:
     build:
       context: ./blog-service
@@ -57,7 +74,8 @@ services:
   
   # MongoDB
   mongo:
-    image: mongo:7
+    image: mongo:6.0.5
+    platform: linux/amd64
     container_name: blog-mongo
     restart: always
     networks:
@@ -67,7 +85,7 @@ services:
     volumes:
       - mongo_data:/data/db
 
-   # Mongo-Express (web UI za Mongo)
+  # Mongo-Express
   mongo-express:
     image: mongo-express
     restart: always
