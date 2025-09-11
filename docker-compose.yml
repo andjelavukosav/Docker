@@ -12,11 +12,15 @@ services:
     networks:
       - servers
     ports:
-      - "8080:8080"   # Frontend šalje sve REST pozive na ovaj port
+      - "8080:8080"
     depends_on:
       - stakeholders
+      - blog-service
+      - tours-service
     environment:
       - STAKEHOLDERS_SERVICE_ADDRESS=stakeholders:8000
+      - BLOG_SERVICE_ADDRESS=blog-service:8082
+      - TOURS_SERVICE_ADDRESS=tours-service:8084
       - GATEWAY_ADDRESS=:8080
 
   # Stakeholders servis (gRPC server)
@@ -30,7 +34,7 @@ services:
     networks:
       - servers
     ports:
-      - "8000:8000"   # gRPC server sluša na 8000 unutar mreže
+      - "8000:8000"
     depends_on:
       - neo4j
     environment:
@@ -51,7 +55,7 @@ services:
     environment:
       - NEO4J_AUTH=neo4j/stakeholders
     volumes:
-      - neo4j_data:/data
+      - ./Stakeholders/uploads:/app/uploads
 
   # Blog servis
   blog-service:
@@ -64,19 +68,38 @@ services:
     networks:
       - servers
     ports:
-      - "8082:8082"   
+      - "8082:8082"
     depends_on:
       - mongo
     environment:
-      - MONGODB_URI=mongodb://mongo:27017
+      - MONGODB_URI=mongodb://app-mongo:27017/blogdb
     volumes:
       - ./blog-service/uploads:/app/uploads
   
-  # MongoDB
+  # Tours servis
+  tours-service:
+    build:
+      context: ./Tours
+      dockerfile: Dockerfile
+    image: tours_web_server
+    container_name: tours_server
+    restart: always
+    networks:
+      - servers
+    ports:
+      - "8084:8084"
+    depends_on:
+      - mongo
+    environment:
+      - MONGODB_URI=mongodb://app-mongo:27017/toursdb
+    volumes:
+      - ./Tours/uploads:/app/uploads
+
+  # MongoDB (koristi se i za blog i za tours)
   mongo:
     image: mongo:6.0.5
     platform: linux/amd64
-    container_name: blog-mongo
+    container_name: app-mongo
     restart: always
     networks:
       - servers
@@ -92,7 +115,7 @@ services:
     ports:
       - 8081:8081
     environment:
-      ME_CONFIG_MONGODB_URL: mongodb://mongo:27017/
+      ME_CONFIG_MONGODB_URL: mongodb://app-mongo:27017/
     networks:
       - servers
 
