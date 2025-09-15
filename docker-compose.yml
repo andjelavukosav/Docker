@@ -22,6 +22,8 @@ services:
       - BLOG_SERVICE_ADDRESS=blog-service:8082
       - TOURS_SERVICE_ADDRESS=tours-service:8084
       - GATEWAY_ADDRESS=:8080
+    volumes:
+      - ./api-gateway/uploads:/app/uploads 
 
   # Stakeholders servis (gRPC server)
   stakeholders:
