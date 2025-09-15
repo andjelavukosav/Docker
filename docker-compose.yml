@@ -23,7 +23,7 @@ services:
       - TOURS_SERVICE_ADDRESS=tours-service:8084
       - GATEWAY_ADDRESS=:8080
     volumes:
-      - ./api-gateway/uploads:/app/uploads  # <<< OVO DODAJ
+      - ./api-gateway/uploads:/app/uploads 
 
   # Stakeholders servis (gRPC server)
   stakeholders:
@@ -74,6 +74,7 @@ services:
     depends_on:
       - mongo
     environment:
+      - BLOG_SERVICE_ADDRESS=:8082
       - MONGODB_URI=mongodb://app-mongo:27017/blogdb
     volumes:
       - ./blog-service/uploads:/app/uploads
