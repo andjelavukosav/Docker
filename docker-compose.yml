@@ -23,7 +23,7 @@ services:
       - TOURS_SERVICE_ADDRESS=tours-service:8084
       - GATEWAY_ADDRESS=:8080
     volumes:
-      - ./api-gateway/uploads:/app/uploads  # <<< OVO DODAJ
+      - ./api-gateway/uploads:/app/uploads # <<< OVO DODAJ
 
   # Stakeholders servis (gRPC server)
   stakeholders:
@@ -77,7 +77,7 @@ services:
       - MONGODB_URI=mongodb://app-mongo:27017/blogdb
     volumes:
       - ./blog-service/uploads:/app/uploads
-  
+
   # Tours servis
   tours-service:
     build:
@@ -99,7 +99,7 @@ services:
 
   # MongoDB (koristi se i za blog i za tours)
   mongo:
-    image: mongo:6.0.5
+    image: mongo:7.0
     platform: linux/amd64
     container_name: app-mongo
     restart: always
