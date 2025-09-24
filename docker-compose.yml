@@ -1,4 +1,4 @@
-version: "3.7"
+version: "3.9"
 
 services:
   # Gateway servis
@@ -17,16 +17,18 @@ services:
       - stakeholders
       - blog-service
       - tours-service
+      - payments
     environment:
       - STAKEHOLDERS_SERVICE_ADDRESS=stakeholders:8000
       - BLOG_SERVICE_ADDRESS=blog-service:8082
       - TOURS_SERVICE_ADDRESS=tours-service:8084
       - FOLLOWER_SERVICE_ADDRESS=follower-service:50051
       - GATEWAY_ADDRESS=:8080
+      - SHOPPING_CART_SERVICE_ADDRESS=payments:50054
     volumes:
       - ./api-gateway/uploads:/app/uploads
 
-  # Stakeholders servis (gRPC server)
+  # Stakeholders servis
   stakeholders:
     build:
       context: ./Stakeholders
@@ -80,6 +82,75 @@ services:
     volumes:
       - ./blog-service/uploads:/app/uploads
 
+    # =============================
+  # Payments Postgres baza
+  # =============================
+  payments-db:
+    image: postgres:13
+    container_name: payments_db
+    restart: always
+    networks:
+      - servers
+    environment:
+      POSTGRES_PASSWORD: super
+      POSTGRES_USER: postgres
+      POSTGRES_DB: explorer
+    volumes:
+      - type: volume
+        source: database-data
+        target: /var/lib/postgresql/data
+      - ./Payments/explorer-init-data.sql:/docker-entrypoint-initdb.d/explorer-init.sql
+    ports:
+      - "5432:5432"
+
+  # Migration servis (dotnet EF)
+  smart-tutor-migration:
+    build:
+      context: ./Payments
+      dockerfile: Dockerfile
+      target: migration
+    container_name: smart_tutor_migration
+    networks:
+      - servers
+    environment:
+      - STARTUP_PROJECT=Explorer.API
+      - STAKEHOLDERS_TARGET_PROJECT=Explorer.Stakeholders.Infrastructure
+      - TOURS_TARGET_PROJECT=Explorer.Tours.Infrastructure
+      - BLOG_TARGET_PROJECT=Explorer.Blog.Infrastructure
+      - DATABASE_HOST=payments-db
+      - DATABASE_USERNAME=postgres
+      - DATABASE_PASSWORD=super
+      - DATABASE_SCHEMA=explorer
+    depends_on:
+      - payments-db
+    restart: "no"
+
+  # =============================
+  # Payments server (runtime)
+  # =============================
+  payments:
+    build:
+      context: ./Payments
+      dockerfile: Dockerfile
+      target: runtime
+    image: payments_web_server
+    container_name: payments_server
+    restart: on-failure
+    networks:
+      - servers
+    ports:
+      - "50054:50054"
+    depends_on:
+      - payments-db
+    environment:
+      - DATABASE_HOST=payments-db
+      - DATABASE_PORT=5432
+      - DATABASE_USERNAME=postgres
+      - DATABASE_PASSWORD=super
+      - DATABASE_NAME=explorer # <-- ovo je Postgres baza
+      - DATABASE_SCHEMA=public # <-- ovo je Postgres schema
+    platform: linux/amd64 # <-- Add this line
+
   # Tours servis
   tours-service:
     build:
@@ -120,6 +191,8 @@ services:
       - "50051:50051"
 
   # MongoDB (koristi se i za blog i za tours)
+
+  # MongoDB (za blog i tours)
   mongo:
     image: mongo:7.0
     platform: linux/amd64
@@ -137,15 +210,16 @@ services:
     image: mongo-express
     restart: always
     ports:
-      - 8081:8081
+      - "8081:8081"
     environment:
-      ME_CONFIG_MONGODB_URL: mongodb://app-mongo:27017/
+      - ME_CONFIG_MONGODB_URL=mongodb://app-mongo:27017/
     networks:
       - servers
 
 volumes:
   neo4j_data:
   mongo_data:
+  database-data:
 
 networks:
   servers:
