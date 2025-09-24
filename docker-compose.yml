@@ -1,6 +1,33 @@
 version: "3.7"
 
 services:
+  # Gateway servis
+  gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    image: gateway_web_server
+    container_name: gateway_server
+    restart: always
+    networks:
+      - servers
+    ports:
+      - "8080:8080"
+    depends_on:
+      - stakeholders
+      - blog-service
+      - tours-service
+      - payments
+    environment:
+      - STAKEHOLDERS_SERVICE_ADDRESS=stakeholders:8000
+      - BLOG_SERVICE_ADDRESS=blog-service:8082
+      - TOURS_SERVICE_ADDRESS=tours-service:8084
+      - GATEWAY_ADDRESS=:8080
+      - SHOPPING_CART_SERVICE_ADDRESS=payments:50054
+    volumes:
+      - ./api-gateway/uploads:/app/uploads
+
+  # Stakeholders servis (gRPC server)
   stakeholders:
     build:
       context: ./Stakeholders
@@ -11,14 +38,19 @@ services:
     networks:
       - servers
     ports:
-      - "8080:8080"
+      - "8000:8000"
     depends_on:
       - neo4j
     environment:
       - NEO4J_DB=neo4j://neo4j:7687
       - NEO4J_USERNAME=neo4j
       - NEO4J_PASS=stakeholders
-
+      - NATS_HOST=${NATS_HOST}
+      - NATS_PORT=${NATS_PORT}
+      - NATS_USER=${NATS_USER}
+      - NATS_PASS=${NATS_PASS}
+      - PUBLISH_TOUR_COMMAND_SUBJECT=${PUBLISH_TOUR_COMMAND_SUBJECT}
+      - PUBLISH_TOUR_REPLY_SUBJECT=${PUBLISH_TOUR_REPLY_SUBJECT}
 
   neo4j:
     image: neo4j:5.22
@@ -33,10 +65,9 @@ services:
     environment:
       - NEO4J_AUTH=neo4j/stakeholders
     volumes:
-      - neo4j_data:/data
+      - ./Stakeholders/uploads:/app/uploads
 
-  
-  #Blog servis
+  # Blog servis
   blog-service:
     build:
       context: ./blog-service
@@ -47,18 +78,111 @@ services:
     networks:
       - servers
     ports:
-      - "8082:8082"   
+      - "8082:8082"
     depends_on:
       - mongo
     environment:
-      - MONGODB_URI=mongodb://mongo:27017
+      - BLOG_SERVICE_ADDRESS=:8082
+      - MONGODB_URI=mongodb://app-mongo:27017/blogdb
     volumes:
       - ./blog-service/uploads:/app/uploads
   
-  # MongoDB
+    # =============================
+# Payments Postgres baza
+# =============================
+  payments-db:
+    image: postgres:13
+    container_name: payments_db
+    restart: always
+    networks:
+      - servers
+    environment:
+      POSTGRES_PASSWORD: super
+      POSTGRES_USER: postgres
+      POSTGRES_DB: explorer
+    volumes:
+      - type: volume
+        source: database-data
+        target: /var/lib/postgresql/data
+      - ./Payments/explorer-init-data.sql:/docker-entrypoint-initdb.d/explorer-init.sql
+    ports:
+      - "5432:5432"
+
+  # Migration servis (dotnet EF)
+  smart-tutor-migration: 
+    build: 
+      context: ./Payments
+      dockerfile: Dockerfile 
+      target: migration 
+    container_name: smart_tutor_migration 
+    networks: 
+      - servers 
+    environment: 
+      - STARTUP_PROJECT=Explorer.API 
+      - STAKEHOLDERS_TARGET_PROJECT=Explorer.Stakeholders.Infrastructure 
+      - TOURS_TARGET_PROJECT=Explorer.Tours.Infrastructure 
+      - BLOG_TARGET_PROJECT=Explorer.Blog.Infrastructure 
+      - DATABASE_HOST=payments-db 
+      - DATABASE_USERNAME=postgres 
+      - DATABASE_PASSWORD=super 
+      - DATABASE_SCHEMA=explorer 
+    depends_on: 
+      - payments-db 
+    restart: "no"
+
+  payments:
+    build:
+      context: ./Payments
+      dockerfile: Dockerfile
+      target: runtime
+    image: payments_web_server
+    container_name: payments_server
+    restart: on-failure
+    networks:
+      - servers
+    ports:
+      - "50054:50054"
+    depends_on:
+      - payments-db
+    environment:
+      - DATABASE_HOST=payments-db
+      - DATABASE_PORT=5432
+      - DATABASE_USERNAME=postgres
+      - DATABASE_PASSWORD=super
+      - DATABASE_NAME=explorer       # <-- ovo je Postgres baza
+      - DATABASE_SCHEMA=public       # <-- ovo je Postgres schema
+    platform: linux/amd64  # <-- Add this line
+
+  # Tours servis
+  tours-service:
+    build:
+      context: ./Tours
+      dockerfile: Dockerfile
+    image: tours_web_server
+    container_name: tours_server
+    restart: always
+    networks:
+      - servers
+    ports:
+      - "8084:8084"
+    depends_on:
+      - mongo
+    environment:
+      - MONGODB_URI=mongodb://app-mongo:27017/toursdb
+      - NATS_HOST=${NATS_HOST}
+      - NATS_PORT=${NATS_PORT}
+      - NATS_USER=${NATS_USER}
+      - NATS_PASS=${NATS_PASS}
+      - PUBLISH_TOUR_COMMAND_SUBJECT=${PUBLISH_TOUR_COMMAND_SUBJECT}
+      - PUBLISH_TOUR_REPLY_SUBJECT=${PUBLISH_TOUR_REPLY_SUBJECT}
+    volumes:
+      - ./Tours/uploads:/app/uploads
+
+  # MongoDB (koristi se i za blog i za tours)
   mongo:
-    image: mongo:7
-    container_name: blog-mongo
+    image: mongo:6.0.5
+    platform: linux/amd64
+    container_name: app-mongo
     restart: always
     networks:
       - servers
@@ -67,20 +191,41 @@ services:
     volumes:
       - mongo_data:/data/db
 
-   # Mongo-Express (web UI za Mongo)
+  # Mongo-Express
   mongo-express:
     image: mongo-express
     restart: always
     ports:
       - 8081:8081
     environment:
-      ME_CONFIG_MONGODB_URL: mongodb://mongo:27017/
+      ME_CONFIG_MONGODB_URL: mongodb://app-mongo:27017/
     networks:
       - servers
+
+  osrm:
+    image: osrm/osrm-backend
+    container_name: osrm
+    networks:
+      - servers
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./osrm-data:/data
+    command: osrm-routed --algorithm mld /data/novi-sad.osrm
+
+  nats:
+    image: nats
+    container_name: nats
+    restart: always
+    networks:
+      - servers
+    ports:
+      - "4222:4222"
 
 volumes:
   neo4j_data:
   mongo_data:
+  database-data:
 
 networks:
   servers:
