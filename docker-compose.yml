@@ -22,10 +22,11 @@ services:
       - STAKEHOLDERS_SERVICE_ADDRESS=stakeholders:8000
       - BLOG_SERVICE_ADDRESS=blog-service:8082
       - TOURS_SERVICE_ADDRESS=tours-service:8084
+      - FOLLOWER_SERVICE_ADDRESS=follower-service:50051
       - GATEWAY_ADDRESS=:8080
       - SHOPPING_CART_SERVICE_ADDRESS=payments:50054
     volumes:
-      - ./api-gateway/uploads:/app/uploads 
+      - ./api-gateway/uploads:/app/uploads
 
   # Stakeholders servis
   stakeholders:
@@ -80,10 +81,10 @@ services:
       - MONGODB_URI=mongodb://app-mongo:27017/blogdb
     volumes:
       - ./blog-service/uploads:/app/uploads
-      
-   # =============================
-# Payments Postgres baza
-# =============================
+
+    # =============================
+  # Payments Postgres baza
+  # =============================
   payments-db:
     image: postgres:13
     container_name: payments_db
@@ -103,27 +104,26 @@ services:
       - "5432:5432"
 
   # Migration servis (dotnet EF)
-  smart-tutor-migration: 
-    build: 
+  smart-tutor-migration:
+    build:
       context: ./Payments
-      dockerfile: Dockerfile 
-      target: migration 
-    container_name: smart_tutor_migration 
-    networks: 
-      - servers 
-    environment: 
-      - STARTUP_PROJECT=Explorer.API 
-      - STAKEHOLDERS_TARGET_PROJECT=Explorer.Stakeholders.Infrastructure 
-      - TOURS_TARGET_PROJECT=Explorer.Tours.Infrastructure 
-      - BLOG_TARGET_PROJECT=Explorer.Blog.Infrastructure 
-      - DATABASE_HOST=payments-db 
-      - DATABASE_USERNAME=postgres 
-      - DATABASE_PASSWORD=super 
-      - DATABASE_SCHEMA=explorer 
-    depends_on: 
-      - payments-db 
+      dockerfile: Dockerfile
+      target: migration
+    container_name: smart_tutor_migration
+    networks:
+      - servers
+    environment:
+      - STARTUP_PROJECT=Explorer.API
+      - STAKEHOLDERS_TARGET_PROJECT=Explorer.Stakeholders.Infrastructure
+      - TOURS_TARGET_PROJECT=Explorer.Tours.Infrastructure
+      - BLOG_TARGET_PROJECT=Explorer.Blog.Infrastructure
+      - DATABASE_HOST=payments-db
+      - DATABASE_USERNAME=postgres
+      - DATABASE_PASSWORD=super
+      - DATABASE_SCHEMA=explorer
+    depends_on:
+      - payments-db
     restart: "no"
-
 
   # =============================
   # Payments server (runtime)
@@ -147,10 +147,9 @@ services:
       - DATABASE_PORT=5432
       - DATABASE_USERNAME=postgres
       - DATABASE_PASSWORD=super
-      - DATABASE_NAME=explorer       # <-- ovo je Postgres baza
-      - DATABASE_SCHEMA=public       # <-- ovo je Postgres schema
-    platform: linux/amd64  # <-- Add this line
-
+      - DATABASE_NAME=explorer # <-- ovo je Postgres baza
+      - DATABASE_SCHEMA=public # <-- ovo je Postgres schema
+    platform: linux/amd64 # <-- Add this line
 
   # Tours servis
   tours-service:
@@ -171,10 +170,31 @@ services:
     volumes:
       - ./Tours/uploads:/app/uploads
 
-  
+  # Follower servis (NOVO)
+  follower-service:
+    build:
+      context: ./follower-service # putanja do foldera sa tvojim Dockerfile-om
+      dockerfile: Dockerfile
+    image: follower_web_server
+    container_name: follower_server
+    restart: always
+    networks:
+      - servers
+    depends_on:
+      - neo4j
+    environment:
+      - FOLLOWER_SERVICE_ADDRESS=:50051
+      - NEO4J_URI=neo4j://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASS=stakeholders
+    ports:
+      - "50051:50051"
+
+  # MongoDB (koristi se i za blog i za tours)
+
   # MongoDB (za blog i tours)
   mongo:
-    image: mongo:6.0.5
+    image: mongo:7.0
     platform: linux/amd64
     container_name: app-mongo
     restart: always
