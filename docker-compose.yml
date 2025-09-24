@@ -21,9 +21,10 @@ services:
       - STAKEHOLDERS_SERVICE_ADDRESS=stakeholders:8000
       - BLOG_SERVICE_ADDRESS=blog-service:8082
       - TOURS_SERVICE_ADDRESS=tours-service:8084
+      - FOLLOWER_SERVICE_ADDRESS=follower-service:50051
       - GATEWAY_ADDRESS=:8080
     volumes:
-      - ./api-gateway/uploads:/app/uploads # <<< OVO DODAJ
+      - ./api-gateway/uploads:/app/uploads
 
   # Stakeholders servis (gRPC server)
   stakeholders:
@@ -74,6 +75,7 @@ services:
     depends_on:
       - mongo
     environment:
+      - BLOG_SERVICE_ADDRESS=:8082
       - MONGODB_URI=mongodb://app-mongo:27017/blogdb
     volumes:
       - ./blog-service/uploads:/app/uploads
@@ -96,6 +98,26 @@ services:
       - MONGODB_URI=mongodb://app-mongo:27017/toursdb
     volumes:
       - ./Tours/uploads:/app/uploads
+
+  # Follower servis (NOVO)
+  follower-service:
+    build:
+      context: ./follower-service # putanja do foldera sa tvojim Dockerfile-om
+      dockerfile: Dockerfile
+    image: follower_web_server
+    container_name: follower_server
+    restart: always
+    networks:
+      - servers
+    depends_on:
+      - neo4j
+    environment:
+      - FOLLOWER_SERVICE_ADDRESS=:50051
+      - NEO4J_URI=neo4j://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASS=stakeholders
+    ports:
+      - "50051:50051"
 
   # MongoDB (koristi se i za blog i za tours)
   mongo:
